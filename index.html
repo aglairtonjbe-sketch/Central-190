@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Central 911 - Gerenciador Avançado de Emergências</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #080c14; color: #e2e8f0; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 15px; }
+    
+    header { background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .status-bar { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+    .stat { background: #0b1329; padding: 8px 12px; border-radius: 6px; border: 1px solid #1d283a; font-weight: bold; font-size: 0.9em; }
+    .stat span { color: #10b981; }
+    
+    .time-control { display: flex; align-items: center; gap: 6px; background: #0b1329; padding: 5px 10px; border-radius: 6px; }
+    .btn-speed { background: #1e293b; color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-speed.active { background: #2563eb; }
+
+    .nav-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; }
+    .tab-btn { background: #111827; color: #94a3b8; border: 1px solid #1f293d; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; white-space: nowrap; }
+    .tab-btn.active { background: #2563eb; color: #fff; border-color: #3b82f6; }
+
+    .content-area { background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 15px; min-height: 400px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+
+    .card { background: #0b1329; border: 1px solid #1d283a; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    .card-title { font-size: 1em; font-weight: bold; color: #f3f4f6; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .badge { background: #ef4444; color: #fff; font-size: 0.75em; padding: 2px 8px; border-radius: 12px; }
+    .badge-wait { background: #f59e0b; color: #fff; font-size: 0.75em; padding: 2px 8px; border-radius: 12px; }
+
+    .btn-action { background: #10b981; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 8px; font-size: 0.85em; }
+    .btn-action:hover { background: #059669; }
+    .btn-action:disabled { background: #475569; cursor: not-allowed; }
+
+    .log-box { background: #030712; border: 1px solid #1d283a; border-radius: 6px; padding: 10px; height: 110px; overflow-y: auto; font-family: monospace; font-size: 0.8em; color: #38bdf8; }
+    
+    select, input { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 6px; border-radius: 4px; width: 100%; margin-top: 5px; font-size: 0.85em; }
+    
+    .patience-bar { height: 4px; background: #334155; border-radius: 2px; overflow: hidden; margin-top: 6px; }
+    .patience-fill { height: 100%; background: #10b981; width: 100%; transition: width 0.5s linear; }
+
+    .slot-box { background: #161f33; border: 1px dashed #334155; padding: 6px 10px; border-radius: 6px; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82em; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div>
+      <h2>CENTRAL 911</h2>
+      <small style="color: #64748b;">Gestão & Despacho de Emergências</small>
+    </div>
+    <div class="status-bar">
+      <div class="stat">Verba: <span id="money">$7.000</span></div>
+      <div class="stat">Reputação: <span id="rep" style="color:#38bdf8;">80%</span></div>
+      <div class="stat">Linhas: <span id="lines-status" style="color:#f59e0b;">0/2</span></div>
+    </div>
+    <div class="time-control">
+      <span id="clock" style="font-weight: bold; color: #f59e0b; margin-right: 5px;">08:00</span>
+      <button class="btn-speed" id="btn-pause" onclick="setSpeed(0)">⏸</button>
+      <button class="btn-speed active" id="btn-play" onclick="setSpeed(1)">▶</button>
+      <button class="btn-speed" id="btn-fast" onclick="setSpeed(2)">⏩</button>
+    </div>
+  </header>
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" id="tabbtn-dispatch" onclick="openTab('dispatch')">📞 Despacho & Linhas</button>
+    <button class="tab-btn" id="tabbtn-police" onclick="openTab('police')">🚔 Polícia</button>
+    <button class="tab-btn" id="tabbtn-fire" onclick="openTab('fire')">🚒 Bombeiros</button>
+    <button class="tab-btn" id="tabbtn-medical" onclick="openTab('medical')">🚑 SAMU</button>
+    <button class="tab-btn" id="tabbtn-hq" onclick="openTab('hq')">🏢 Central/QG</button>
+  </div>
+
+  <div class="content-area">
+    <!-- ABA DESPACHO -->
+    <div id="tab-dispatch" class="tab-content active">
+      <div class="grid-2">
+        <div>
+          <h3>Atendimentos em Linha</h3>
+          <div id="active-calls-list" style="margin-top: 10px;"></div>
+        </div>
+        <div>
+          <h3>Fila de Espera (Sinal de Ocupado)</h3>
+          <div id="waiting-calls-list" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA POLÍCIA -->
+    <div id="tab-police" class="tab-content">
+      <div class="grid-2">
+        <div>
+          <h3>Painel de Frota da Polícia</h3>
+          <button class="btn-action" onclick="buyVehicle('police', 'Rádio Patrulha', 1500, 4)">Comprar Rádio Patrulha ($1.500 - 4 Vagas)</button>
+          <button class="btn-action" onclick="buyVehicle('police', 'Blindado SWAT', 3500, 6)">Comprar Blindado SWAT ($3.500 - 6 Vagas)</button>
+          <div id="police-vehicles-list" style="margin-top: 10px;"></div>
+        </div>
+        <div>
+          <h3>Contratar Pessoal (Polícia)</h3>
+          <button class="btn-action" onclick="hireStaff('police', 'Oficial Padrão', 300)">Contratar Oficial ($300)</button>
+          <button class="btn-action" onclick="hireStaff('police', 'Negociador', 600)">Contratar Negociador ($600)</button>
+          <button class="btn-action" onclick="hireStaff('police', 'Agente Tático', 800)">Contratar Agente Tático ($800)</button>
+          <button class="btn-action" onclick="hireStaff('police', 'Perito Investigador', 700)">Contratar Perito ($700)</button>
+          <div id="police-staff-list" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA BOMBEIROS -->
+    <div id="tab-fire" class="tab-content">
+      <div class="grid-2">
+        <div>
+          <h3>Painel de Frota de Bombeiros</h3>
+          <button class="btn-action" onclick="buyVehicle('fire', 'Caminhão APT', 2000, 4)">Comprar Caminhão APT ($2.000 - 4 Vagas)</button>
+          <button class="btn-action" onclick="buyVehicle('fire', 'Caminhão Hazmat', 2800, 3)">Comprar Caminhão Hazmat ($2.800 - 3 Vagas)</button>
+          <div id="fire-vehicles-list" style="margin-top: 10px;"></div>
+        </div>
+        <div>
+          <h3>Contratar Pessoal (Bombeiros)</h3>
+          <button class="btn-action" onclick="hireStaff('fire', 'Combatente', 400)">Contratar Combatente ($400)</button>
+          <button class="btn-action" onclick="hireStaff('fire', 'Paramédico Resgate', 500)">Contratar Paramédico ($500)</button>
+          <button class="btn-action" onclick="hireStaff('fire', 'Mergulhador', 650)">Contratar Mergulhador ($650)</button>
+          <button class="btn-action" onclick="hireStaff('fire', 'Especialista Hazmat', 750)">Contratar Esp. Hazmat ($750)</button>
+          <div id="fire-staff-list" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA SAMU -->
+    <div id="tab-medical" class="tab-content">
+      <div class="grid-2">
+        <div>
+          <h3>Painel de Frota do SAMU</h3>
+          <button class="btn-action" onclick="buyVehicle('medical', 'Ambulância USB', 1200, 2)">Comprar Ambulância USB ($1.200 - 2 Vagas)</button>
+          <button class="btn-action" onclick="buyVehicle('medical', 'Ambulância UTI', 2200, 3)">Comprar Ambulância UTI ($2.200 - 3 Vagas)</button>
+          <div id="medical-vehicles-list" style="margin-top: 10px;"></div>
+        </div>
+        <div>
+          <h3>Contratar Pessoal (SAMU)</h3>
+          <button class="btn-action" onclick="hireStaff('medical', 'Socorrista', 350)">Contratar Socorrista ($350)</button>
+          <button class="btn-action" onclick="hireStaff('medical', 'Médico Intervencionista', 900)">Contratar Médico ($900)</button>
+          <button class="btn-action" onclick="hireStaff('medical', 'Piloto Resgate', 800)">Contratar Piloto ($800)</button>
+          <div id="medical-staff-list" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA CENTRAL/QG -->
+    <div id="tab-hq" class="tab-content">
+      <h3>Upgrades da Central 911</h3>
+      <div class="grid-2" style="margin-top: 10px;">
+        <div class="card">
+          <div class="card-title">Linhas Telefônicas Exclusivas</div>
+          <p style="font-size: 0.85em; color: #94a3b8;">Aumenta a capacidade de atender chamadas em simultâneo.</p>
+          <p style="font-size: 0.85em; color: #38bdf8; margin-top: 5px;">Linhas Atuais: <span id="hq-lines-count">2</span></p>
+          <button class="btn-action" onclick="buyPhoneLine()">Expandir 1 Linha ($1.000)</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Atendentes / Operadores</div>
+          <p style="font-size: 0.85em; color: #94a3b8;">Cada linha necessita de um operador para processar as ligações.</p>
+          <p style="font-size: 0.85em; color: #38bdf8; margin-top: 5px;">Operadores: <span id="hq-operators-count">2</span></p>
+          <button class="btn-action" onclick="hireOperator()">Contratar Operador ($500)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h4>Rádio / Diário de Bordo</h4>
+  <div class="log-box" id="log-box">
+    [08:00] Turno iniciado. Central operando com 2 linhas.<br/>
+  </div>
+</div>
+
+<script>
+  let gameState = {
+    money: 7000,
+    rep: 80,
+    timeHour: 8,
+    timeMin: 0,
+    speed: 1,
+    phoneLines: 2,
+    operators: 2,
+    activeCalls: [],
+    waitingCalls: [],
+    vehicles: [],
+    staff: []
+  };
+
+  let timerId = null;
+
+  function addLog(msg) {
+    const box = document.getElementById('log-box');
+    const timeStr = `${String(gameState.timeHour).padStart(2,'0')}:${String(gameState.timeMin).padStart(2,'0')}`;
+    box.innerHTML += `[${timeStr}] ${msg}<br/>`;
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function startTimer() {
+    if (timerId) clearInterval(timerId);
+    if (gameState.speed === 0) return;
+
+    let interval = 1000 / gameState.speed;
+    timerId = setInterval(() => {
+      gameState.timeMin += 5;
+      if (gameState.timeMin >= 60) {
+        gameState.timeMin = 0;
+        gameState.timeHour = (gameState.timeHour + 1) % 24;
+      }
+      document.getElementById('clock').innerText = `${String(gameState.timeHour).padStart(2,'0')}:${String(gameState.timeMin).padStart(2,'0')}`;
+
+      // Processa paciência da fila de espera
+      for (let i = gameState.waitingCalls.length - 1; i >= 0; i--) {
+        let call = gameState.waitingCalls[i];
+        call.patience -= 5;
+        if (call.patience <= 0) {
+          addLog(`❌ LIGAÇÃO PERDIDA: A vítima desligou por demora! (-5% Reputação)`);
+          gameState.rep = Math.max(0, gameState.rep - 5);
+          gameState.waitingCalls.splice(i, 1);
+        }
+      }
+
+      // Tenta mover da fila de espera para linha ativa se houver capacidade
+      let maxCap = Math.min(gameState.phoneLines, gameState.operators);
+      while (gameState.activeCalls.length < maxCap && gameState.waitingCalls.length > 0) {
+        let movedCall = gameState.waitingCalls.shift();
+        gameState.activeCalls.push(movedCall);
+        addLog(`📞 LIGAÇÃO ATENDIDA: Chamada transferida para operador livre.`);
+      }
+
+      // Gera chamadas aleatórias
+      if (Math.random() < 0.35) {
+        generateCall();
+      }
+
+      updateUI();
+    }, interval);
+  }
+
+  function setSpeed(spd) {
+    gameState.speed = spd;
+    document.getElementById('btn-pause').classList.remove('active');
+    document.getElementById('btn-play').classList.remove('active');
+    document.getElementById('btn-fast').classList.remove('active');
+
+    if (spd === 0) document.getElementById('btn-pause').classList.add('active');
+    if (spd === 1) document.getElementById('btn-play').classList.add('active');
+    if (spd === 2) document.getElementById('btn-fast').classList.add('active');
+
+    startTimer();
+  }
+
+  function openTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+    document.getElementById(`tabbtn-${tabName}`).classList.add('active');
+  }
+
+  const callTemplates = [
+    { title: "Briga em Lanchonete", dept: "police", reqStaff: "Oficial Padrão", reward: 350 },
+    { title: "Assalto com Reféns", dept: "police", reqStaff: "Negociador", reward: 900 },
+    { title: "Tiroteio de Gangues", dept: "police", reqStaff: "Agente Tático", reward: 1100 },
+    { title: "Incêndio Residencial", dept: "fire", reqStaff: "Combatente", reward: 750 },
+    { title: "Vazamento Químico", dept: "fire", reqStaff: "Especialista Hazmat", reward: 1200 },
+    { title: "Parada Cardíaca", dept: "medical", reqStaff: "Médico Intervencionista", reward: 850 },
+    { title: "Atropelamento com Vítima", dept: "medical", reqStaff: "Socorrista", reward: 500 }
+  ];
+
+  function generateCall() {
+    const template = callTemplates[Math.floor(Math.random() * callTemplates.length)];
+    const call = {
+      id: Date.now() + Math.random(),
+      title: template.title,
+      dept: template.dept,
+      reqStaff: template.reqStaff,
+      reward: template.reward,
+      patience: 100
+    };
+
+    let maxCap = Math.min(gameState.phoneLines, gameState.operators);
+    if (gameState.activeCalls.length < maxCap) {
+      gameState.activeCalls.push(call);
+      addLog(`🚨 LIGAÇÃO RECEBIDA: ${call.title}`);
+    } else {
+      gameState.waitingCalls.push(call);
+      addLog(`⚠️ LINHAS OCUPADAS: Chamada para "${call.title}" aguardando na fila!`);
+    }
+  }
+
+  function buyVehicle(dept, name, cost, capacity) {
+    if (gameState.money >= cost) {
+      gameState.money -= cost;
+      gameState.vehicles.push({
+        id: Date.now(),
+        dept: dept,
+        name: name,
+        capacity: capacity,
+        status: 'Disponível'
+      });
+      addLog(`🚘 Veículo adquirido: ${name}`);
+      updateUI();
+    } else {
+      addLog(`⚠️ Verba insuficiente para comprar ${name}`);
+    }
+  }
+
+  function hireStaff(dept, role, cost) {
+    if (gameState.money >= cost) {
+      gameState.money -= cost;
+      gameState.staff.push({
+        id: Date.now(),
+        dept: dept,
+        role: role,
+        vehicleId: null
+      });
+      addLog(`👤 Profissional contratado: ${role} (${dept.toUpperCase()})`);
+      updateUI();
+    } else {
+      addLog(`⚠️ Verba insuficiente para contratar ${role}`);
+    }
+  }
+
+  function assignSlotStaff(vehicleId, slotIndex, staffId) {
+    if (staffId !== "") {
+      let staffMember = gameState.staff.find(s => s.id == staffId);
+      if (staffMember) {
+        staffMember.vehicleId = vehicleId;
+        addLog(`👤 ${staffMember.role} alocado para o veículo.`);
+      }
+    }
+    updateUI();
+  }
+
+  function removeStaffFromVehicle(staffId) {
+    let staffMember = gameState.staff.find(s => s.id == staffId);
+    if (staffMember) {
+      staffMember.vehicleId = null;
+      addLog(`👤 ${staffMember.role} removido para a base.`);
+      updateUI();
+    }
+  }
+
+  function dispatchCall(callId) {
+    let callIndex = gameState.activeCalls.findIndex(c => c.id == callId);
+    if (callIndex === -1) return;
+    let call = gameState.activeCalls[callIndex];
+
+    let availableVehicle = gameState.vehicles.find(v => {
+      if (v.dept !== call.dept || v.status !== 'Disponível') return false;
+      let staffInVehicle = gameState.staff.filter(s => s.vehicleId === v.id);
+      return staffInVehicle.some(s => s.role === call.reqStaff);
+    });
+
+    if (!availableVehicle) {
+      addLog(`❌ DESPACHO RECUSADO: É necessário um veículo livre de ${call.dept.toUpperCase()} contendo pelo menos 1x [${call.reqStaff}]!`);
+      return;
+    }
+
+    availableVehicle.status = 'Em Ocorrência';
+    gameState.money += call.reward;
+    gameState.rep = Math.min(100, gameState.rep + 2);
+    addLog(`✅ DESPACHO SUCESSO: ${availableVehicle.name} enviada para "${call.title}" (+$${call.reward})`);
+
+    gameState.activeCalls.splice(callIndex, 1);
+
+    setTimeout(() => {
+      availableVehicle.status = 'Disponível';
+      addLog(`🔄 ${availableVehicle.name} concluiu o atendimento e retornou à garagem.`);
+      updateUI();
+    }, 8000);
+
+    updateUI();
+  }
+
+  function buyPhoneLine() {
+    if (gameState.money >= 1000) {
+      gameState.money -= 1000;
+      gameState.phoneLines++;
+      addLog(`📞 Nova linha telefônica instalada! Total: ${gameState.phoneLines}`);
+      updateUI();
+    } else {
+      addLog(`⚠️ Verba insuficiente para expandir linhas.`);
+    }
+  }
+
+  function hireOperator() {
+    if (gameState.money >= 500) {
+      gameState.money -= 500;
+      gameState.operators++;
+      addLog(`🎧 Novo operador contratado! Total: ${gameState.operators}`);
+      updateUI();
+    } else {
+      addLog(`⚠️ Verba insuficiente para contratar operador.`);
+    }
+  }
+
+  function renderDepartmentUI(dept) {
+    let vList = document.getElementById(`${dept}-vehicles-list`);
+    let deptVehicles = gameState.vehicles.filter(v => v.dept === dept);
+    let freeStaff = gameState.staff.filter(s => s.dept === dept && s.vehicleId === null);
+
+    if (deptVehicles.length === 0) {
+      vList.innerHTML = `<p style="font-size:0.85em; color:#64748b;">Nenhum veículo na garagem.</p>`;
+    } else {
+      vList.innerHTML = deptVehicles.map(v => {
+        let staffInV = gameState.staff.filter(s => s.vehicleId === v.id);
+        
+        let slotsHTML = '';
+        for (let i = 0; i < v.capacity; i++) {
+          let assigned = staffInV[i];
+          if (assigned) {
+            slotsHTML += `
+              <div class="slot-box">
+                <span style="color:#10b981;">Vaga ${i+1}: <strong>${assigned.role}</strong></span>
+                <button style="background:#ef4444; border:none; color:#fff; border-radius:3px; padding:2px 6px; cursor:pointer; font-size:0.75em;" onclick="removeStaffFromVehicle(${assigned.id})">Remover</button>
+              </div>
+            `;
+          } else {
+            let options = freeStaff.map(s => `<option value="${s.id}">${s.role}</option>`).join('');
+            slotsHTML += `
+              <div class="slot-box">
+                <span style="color:#94a3b8;">Vaga ${i+1}: <em>Vazia</em></span>
+                ${freeStaff.length > 0 ? `
+                  <select style="width: auto; margin:0; padding:2px 4px;" onchange="assignSlotStaff(${v.id}, ${i}, this.value)">
+                    <option value="">+ Adicionar</option>
+                    ${options}
+                  </select>
+                ` : '<span style="color:#64748b; font-size:0.8em;">(Sem pessoal livre)</span>'}
+              </div>
+            `;
+          }
+        }
+
+        return `
+          <div class="card">
+            <div class="card-title">${v.name} <span class="badge" style="background:${v.status==='Disponível'?'#10b981':'#f59e0b'}">${v.status}</span></div>
+            <p style="font-size:0.8em; color:#94a3b8; margin-bottom: 6px;">Vagas ocupadas: ${staffInV.length} / ${v.capacity}</p>
+            ${slotsHTML}
+          </div>
+        `;
+      }).join('');
+    }
+
+    let sList = document.getElementById(`${dept}-staff-list`);
+    let deptStaff = gameState.staff.filter(s => s.dept === dept);
+    if (deptStaff.length === 0) {
+      sList.innerHTML = `<p style="font-size:0.85em; color:#64748b;">Nenhum profissional contratado.</p>`;
+    } else {
+      sList.innerHTML = `
+        <div class="card">
+          <p style="font-size:0.85em; color:#94a3b8; margin-bottom:8px;"><strong>Equipe Contratada:</strong> ${deptStaff.length} pessoas</p>
+          ${deptStaff.map(s => {
+            let vAssigned = gameState.vehicles.find(v => v.id === s.vehicleId);
+            return `
+              <div style="font-size:0.8em; padding:4px 0; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between;">
+                <span>${s.role}</span>
+                <span style="color:${vAssigned ? '#10b981' : '#f59e0b'};">${vAssigned ? vAssigned.name : 'Na Base (Livre)'}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+  }
+
+  function updateUI() {
+    document.getElementById('money').innerText = `$${gameState.money.toLocaleString()}`;
+    document.getElementById('rep').innerText = `${gameState.rep}%`;
+
+    let activeCap = Math.min(gameState.phoneLines, gameState.operators);
+    document.getElementById('lines-status').innerText = `${gameState.activeCalls.length}/${activeCap} (Linhas: ${gameState.phoneLines} | Op: ${gameState.operators})`;
+    document.getElementById('hq-lines-count').innerText = gameState.phoneLines;
+    document.getElementById('hq-operators-count').innerText = gameState.operators;
+
+    let activeContainer = document.getElementById('active-calls-list');
+    if (gameState.activeCalls.length === 0) {
+      activeContainer.innerHTML = `<p style="font-size:0.85em; color:#64748b;">Nenhuma chamada em atendimento no momento.</p>`;
+    } else {
+      activeContainer.innerHTML = gameState.activeCalls.map(c => `
+        <div class="card">
+          <div class="card-title">${c.title} <span class="badge">EM LINHA</span></div>
+          <p style="font-size:0.8em; color:#94a3b8;">Requer: 1x [${c.reqStaff}] do setor ${c.dept.toUpperCase()}</p>
+          <p style="font-size:0.8em; color:#10b981;">Recompensa: $${c.reward}</p>
+          <button class="btn-action" onclick="dispatchCall(${c.id})">Despachar Equipe</button>
+        </div>
+      `).join('');
+    }
+
+    let waitingContainer = document.getElementById('waiting-calls-list');
+    if (gameState.waitingCalls.length === 0) {
+      waitingContainer.innerHTML = `<p style="font-size:0.85em; color:#64748b;">Fila de espera vazia.</p>`;
+    } else {
+      waitingContainer.innerHTML = gameState.waitingCalls.map(c => `
+        <div class="card">
+          <div class="card-title">${c.title} <span class="badge-wait">AGUARDANDO</span></div>
+          <p style="font-size:0.8em; color:#94a3b8;">Setor: ${c.dept.toUpperCase()}</p>
+          <div class="patience-bar">
+            <div class="patience-fill" style="width: ${c.patience}%; background: ${c.patience < 30 ? '#ef4444' : '#f59e0b'};"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    renderDepartmentUI('police');
+    renderDepartmentUI('fire');
+    renderDepartmentUI('medical');
+  }
+
+  startTimer();
+  updateUI();
+</script>
+</body>
+</html>
